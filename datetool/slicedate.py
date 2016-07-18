@@ -100,7 +100,7 @@ class SliceDate(object):
     def run(self, slice_method, start_date):
         """"""
         if self.date_list is None:
-            today = datetime.date.today() .strftime('%Y%m%d')
+            today = datetime.date.today().strftime('%Y%m%d')
             datelist = gen_date_list(start_date, today)
         else:
             datelist = []
