@@ -74,6 +74,7 @@ class EventStudy(qt.QuantLib):
     def _find_event_return(self):
         """"""
         
+        
     #----------------------------------------------------------------------
     def plot_event(self):
         """"""
