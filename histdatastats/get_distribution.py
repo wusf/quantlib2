@@ -82,4 +82,6 @@ class GetHistReturnDist(lib.QuantLib):
         plt.xlabel('return')
         plt.ylabel('Probability distribution density')
         plt.legend(['Gaussion PDF', 'Empirical PDF'])
+        plt.savefig("Empirical_vs_Gaussion{}{}.png"
+                    .format('_StockCode_',self.security_id)) 
         plt.show()

@@ -32,11 +32,17 @@ class SetStockUniverse(lib.QuantLib):
         self.constituent_adjust_date_position = 0
         self.len_constituent_adjust_date = 0
         
+        self.constituent_stocks = []
+        
         
     #----------------------------------------------------------------------
     def get_stocks_by_index(self, indexcode, date):
         """"""
         if len(self.constituent_adjust_date_list) == 0:
+            
+            msg = "Get constituent stock of '{}'".format(indexcode)
+            self.log.info(msg)
+            
             cur = self.conn.cursor()
             sql = """
                   select distinct DateInclude 
@@ -60,9 +66,30 @@ class SetStockUniverse(lib.QuantLib):
                 break
                 
         if adjust_date_pair != self.constituent_adjust_dates:
+            
+            msg = ("Constituents of '{}' has been changed, get new stock universe @'{}'".
+                   format(indexcode, adjust_date_pair[0]))
+            self.log.info(msg)
+            
             self.constituent_adjust_dates = adjust_date_pair
             self.constituent_adjust_date_position = p
             
-        print self.constituent_adjust_dates
+            include_date = adjust_date_pair[0]
+            exclude_date = adjust_date_pair[1]
+            sql = """
+                  select Stkcode 
+                  from info_data_index_constituent
+                  where DateInclude<='{}'
+                  and (DateExclude>'{}' or DateExclude is NULL)
+                  and IndexCode = '{}'
+                  """.format(include_date, include_date, indexcode)
+            cur = self.conn.cursor()
+            cur.execute(sql)
+            self.constituent_stocks = []
+            rows = cur.fetchall()
+            for row in rows:
+                self.constituent_stocks.append(row[0])
+            
+
                 
 
