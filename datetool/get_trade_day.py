@@ -55,7 +55,7 @@ class GetTradeDay(lib.QuantLib):
                 sql = """
                       select Date 
                       from market_data_trade_day
-                      where date>'{}'
+                      where date>='{}'
                       order by date asc
                       limit {}
                       """.format(day, abs(offset))
@@ -63,7 +63,7 @@ class GetTradeDay(lib.QuantLib):
                 sql = """
                       select Date 
                       from market_data_trade_day
-                      where date<='{}'
+                      where date<'{}'
                       order by date desc
                       limit {}
                       """.format(day, abs(offset))   
@@ -72,7 +72,7 @@ class GetTradeDay(lib.QuantLib):
             _val = rows[-1][0]
             self.trade_days_dict[_key] = _val
         tm2 = time.time()
-        print tm2-tm1
+        #print tm2-tm1
         return _val
     
     
@@ -81,10 +81,26 @@ class GetTradeDay(lib.QuantLib):
         """"""
         tm1 = time.time()
         if offset>0:
-            _val = self.trade_days[self.trade_days.index>date].index[offset-1]
+            _val = self.trade_days[self.trade_days.index>=date].index[offset-1]
         else:
-            _val = self.trade_days[self.trade_days.index<=date].index[-offset]
+            _val = self.trade_days[self.trade_days.index<date].index[-offset]
         tm2 = time.time()
-        print tm2-tm1
+        #print tm2-tm1
+        return _val
+    
+    
+    #----------------------------------------------------------------------
+    def check_stock_trade_status(self, stkcode, check_date, offset):
+        """"""
+        cur = self.conn.cursor()
+        sql = """
+              select Status 
+              from market_data_a_share
+              where StkCode='{}' and Date>='{}'
+              order by date asc
+              limit {}
+              """.format(stkcode, check_date, abs(offset))   
+        cur.execute(sql)
+        _val = cur.fetchone()[0]
         return _val
             

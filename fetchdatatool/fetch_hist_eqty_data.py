@@ -91,7 +91,7 @@ class FetchHistData(qt.QuantLib):
             df = pd.concat([df,_df], axis=1)
         df = df.reindex(self.trade_days[start_date:end_date].index)
         tm2 = time.time()
-        print tm2-tm1
+        #print tm2-tm1
         return df
     
     
@@ -108,14 +108,32 @@ class FetchHistData(qt.QuantLib):
         else:
             dff = price.diff(1)
             df = dff/price
-        df = df[1:].fillna(0)
+        df = df[1:]
         return df
     
     
     #----------------------------------------------------------------------
-    def fetch_trade_status(self, stkcode_list, security_type):
+    def fetch_hedged_return(self, stkcode_list, security_type, 
+                            start_date, end_date, period, return_type,
+                            hedged_index):
         """"""
+        _price_stk = self.fetch_close_price(stkcode_list, security_type, 
+                                        start_date, end_date, 1)
+        price_stk = _price_stk[::period]
+        _price_ind = self.fetch_close_price([hedged_index], 'index', 
+                                        start_date, end_date, 1)
+        price_ind = _price_ind[::period]    
         
+        price = pd.concat([price_stk, price_ind], axis=1)
+        if return_type == 'log':
+            logprice = np.log(price)
+            df = logprice.diff(1)
+        else:
+            dff = price.diff(1)
+            df = dff/price   
+        df = df[stkcode_list] - df[[hedged_index]].values
+        df = df[1:]
+        return df        
     
     
     
