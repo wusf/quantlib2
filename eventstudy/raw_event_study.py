@@ -10,6 +10,8 @@ import datetime
 import sqlite3 as lite
 import quantlib as qt
 import investuniversetool.set_stock_universe as stkuniver
+import datetool.get_trade_day as gtrdday
+import fetchdatatool.fetch_hist_eqty_data as fetchdata
 
 
 ########################################################################
@@ -35,6 +37,10 @@ class EventStudy(qt.QuantLib):
         self.end_date = ''
         
         self.events = []
+        
+        self.trdday = gtrdday.GetTradeDay(dbinfocfgpath, log)
+        
+        self.fetchdata = fetchdata.FetchHistData(dbinfocfgpath, log)
         
         
     #----------------------------------------------------------------------
@@ -71,8 +77,20 @@ class EventStudy(qt.QuantLib):
             
             
     #----------------------------------------------------------------------
-    def _find_event_return(self):
+    def _calc_event_return(self, event_info, look_ahead_days, look_back_days):
         """"""
+        event_day = event_info[1]
+        event_end_day = event_info[2]
+        test_end_day = min(self.trdday.find_trade_day(event_day, look_ahead_days),
+                           event_end_day)
+        test_start_day = self.trdday.find_trade_day(event_day, -look_back_day)
+        stockcode = [event_info[0]]
+        security_type = 'a_stock'
+        period = 1
+        return_type = 'log'
+        
+        self.fetchdata.fetch_return()
+        
         
         
     #----------------------------------------------------------------------

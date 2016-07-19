@@ -11,6 +11,7 @@ import sqlite3 as lite
 import quantlib as qt
 import pandas as pd
 import numpy as np
+import time 
 
 
 ########################################################################
@@ -33,6 +34,15 @@ class FetchHistData(qt.QuantLib):
         
         msg = "Connect to local raw database"
         self.log.info(msg)
+        
+        cur = self.conn.cursor()
+        sql = "select Date from market_data_trade_day order by Date"
+        cur.execute(sql)
+        rows = cur.fetchall()
+        date = []
+        for row in rows:
+            date.append(row[0])
+        self.trade_days = pd.DataFrame(date,index=date)        
         
         
     #----------------------------------------------------------------------
@@ -60,19 +70,18 @@ class FetchHistData(qt.QuantLib):
             msg = "Price type is wrong, input type is {}".format(is_adj)
             self.log.info(msg)
             sys.exit()            
-            
         
+            
+        tm1 = time.time()
         cur = self.conn.cursor()
         df = pd.DataFrame()
         for stk in stkcode_list:
             date = []
             price = []
             sql = """
-                  select Date,{} from {} 
-                  where Date>='{}' and Date<='{}'
-                  and StkCode='{}'
-                  """.format(fieldname, tbname,
-                             start_date, end_date, stk)
+                  select Date,{} from {}
+                  where StkCode='{}' and Date>='{}' and Date<='{}'
+                  """.format(fieldname, tbname, stk, start_date, end_date)
             cur.execute(sql)
             rows = cur.fetchall()
             for row in rows:
@@ -80,6 +89,9 @@ class FetchHistData(qt.QuantLib):
                 price.append(row[1])
             _df = pd.DataFrame(price, index=date, columns=[stk])
             df = pd.concat([df,_df], axis=1)
+        df = df.reindex(self.trade_days[start_date:end_date].index)
+        tm2 = time.time()
+        print tm2-tm1
         return df
     
     
@@ -96,7 +108,14 @@ class FetchHistData(qt.QuantLib):
         else:
             dff = price.diff(1)
             df = dff/price
-        return df[1:]
+        df = df[1:].fillna(0)
+        return df
+    
+    
+    #----------------------------------------------------------------------
+    def fetch_trade_status(self, stkcode_list, security_type):
+        """"""
+        
     
     
     
