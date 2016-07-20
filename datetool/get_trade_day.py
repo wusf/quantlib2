@@ -103,4 +103,20 @@ class GetTradeDay(lib.QuantLib):
         cur.execute(sql)
         _val = cur.fetchone()[0]
         return _val
+    
+    
+    #----------------------------------------------------------------------
+    def get_latest_close_price(self, stkcode, check_date, *arg):
+        """"""
+        cur = self.conn.cursor()
+        sql = """
+              select ClosePrice
+              from market_data_a_share
+              where StkCode='{}' and Date<'{}'
+              order by date desc
+              limit 1
+              """.format(stkcode, check_date)   
+        cur.execute(sql)
+        _val = cur.fetchone()[0]
+        return _val        
             
