@@ -9,6 +9,7 @@
 import sys
 import sqlite3 as lite
 import quantlib as qt
+import datetime
 
 
 ########################################################################
@@ -68,7 +69,7 @@ class ProcFinancialData(qt.QuantLib):
                   where StkCode='{}' and Date>='{}'
                   order by Date asc
                   """
-            date_set = set()
+            k = 0
             for _tb in ['balance_sheet','income_statement','cashflow_statement']:
                 tb = 'financial_data_'+_tb
                 cur.execute(sql.format(tb, stk, self.start_date))
@@ -77,11 +78,40 @@ class ProcFinancialData(qt.QuantLib):
                 for row in rows:
                     _dates.append(row[0])
                 _set = set(_dates)
-                date_set = date_set|_set
+                if k == 0:
+                    date_set = _set
+                else:
+                    date_set = date_set&_set
+                k+=1
             date_list = sorted(list(date_set))
             self.days_when_data_change[stk] = date_list
-                    
+            
+            
+            
+    #----------------------------------------------------------------------
+    def process(self):
+        """"""
+        msg = "Start to process financial data"
+        self.log.info(msg)
         
-         
+        self._find_all_stock_codes()
+        self._find_days_when_data_change()
         
+        cur = self.conn.cursor()
+        for stk in self.all_stock_code:
+            dates = self.days_when_data_change[stk]
+            for date in dates:
+                sql = """
+                      select reportingperiod,Date 
+                      from financial_data_balance_sheet
+                      where StkCode='{}' and Date<='{}'
+                      order by reportingperiod desc
+                      """.format(stk, date)
+                cur.execute(sql)
+                row = cur.fetchone()
+                date_format = "%Y%m%d"
+                a = datetime.datetime.strptime(row[0], date_format)
+                b = datetime.datetime.strptime(date, date_format)
+                print stk,date, row[1], row[0], b-a
+                
         
