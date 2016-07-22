@@ -9,7 +9,8 @@
 import sys
 import sqlite3 as lite
 import quantlib as qt
-import datetime
+from datetime import datetime
+from datetime import timedelta
 
 
 ########################################################################
@@ -33,11 +34,11 @@ class ProcFinancialData(qt.QuantLib):
         self.conn.text_factory = str     
         
         self.all_stock_code = []
-        self.days_when_data_change = {}
+        self.days_when_data_announce = {}
         
     
     #----------------------------------------------------------------------
-    def _find_all_stock_codes(self):
+    def find_all_stock_codes(self):
         """"""
         msg = "Find all stock codes"
         self.log.info(msg)    
@@ -56,20 +57,23 @@ class ProcFinancialData(qt.QuantLib):
             
     
     #----------------------------------------------------------------------
-    def _find_days_when_data_change(self):
+    def find_days_when_data_change(self):
         """"""
-        msg = "Find days when financial data was changed"
+        msg = "Find days when financial data announced"
         self.log.info(msg)   
         
+        date_when_new_announcement = {}
+        
         cur = self.conn.cursor()
+        sql = """
+              select distinct Date 
+              from {}
+              where StkCode='{}' and Date>='{}'
+              order by Date asc
+              """        
         for stk in self.all_stock_code:
-            sql = """
-                  select distinct Date 
-                  from {}
-                  where StkCode='{}' and Date>='{}'
-                  order by Date asc
-                  """
-            k = 0
+            date_list = []
+            date_set = set()
             for _tb in ['balance_sheet','income_statement','cashflow_statement']:
                 tb = 'financial_data_'+_tb
                 cur.execute(sql.format(tb, stk, self.start_date))
@@ -78,15 +82,36 @@ class ProcFinancialData(qt.QuantLib):
                 for row in rows:
                     _dates.append(row[0])
                 _set = set(_dates)
-                if k == 0:
-                    date_set = _set
-                else:
-                    date_set = date_set&_set
-                k+=1
+                date_set = date_set|_set
             date_list = sorted(list(date_set))
-            self.days_when_data_change[stk] = date_list
-            
-            
+            date_when_new_announcement[stk] = date_list
+        
+        sql = """
+              select Date,ReportingPeriod 
+              from {}
+              where StkCode='{}' and Date<='{}' 
+              order by ReportingPeriod desc limit 1
+              """
+        for stk in self.all_stock_code:
+            effective_num_day = 150
+            self.days_when_data_announce[stk] = {}
+            for date in date_when_new_announcement[stk]:
+                rpt_period_list = []
+                for _tb in ['balance_sheet','income_statement','cashflow_statement']:
+                    tb = 'financial_data_'+_tb                
+                    cur.execute(sql.format(tb, stk, date))
+                    row = cur.fetchone()
+                    if row is not None:
+                        _date = datetime.strptime(row[0], '%Y%m%d')
+                        _rpt_period = datetime.strptime(row[1], '%Y%m%d')
+                        days_diff =  (_date - _rpt_period).days
+                        if days_diff <= effective_num_day:
+                            rpt_period_list.append(row[1])
+                if len(rpt_period_list) == 3:
+                    if (rpt_period_list[0] == rpt_period_list[1]
+                        and rpt_period_list[0] == rpt_period_list[2]):
+                        self.days_when_data_announce[stk][date] = rpt_period_list[0]
+                        
             
     #----------------------------------------------------------------------
     def process(self):
