@@ -7,10 +7,15 @@
 """
 
 import sys
+import codecs
 import sqlite3 as lite
-import quantlib as qt
+import time
 from datetime import datetime
 from datetime import timedelta
+from multiprocessing.dummy import Pool 
+from ConfigParser import ConfigParser
+import quantlib as qt
+import procfindata.financial_item_algos_by_sql
 
 
 ########################################################################
@@ -30,7 +35,7 @@ class ProcFinancialData(qt.QuantLib):
         loc_db_raw_path = self.dbinfocfg.get('dblocalraw', 'path')
         loc_db_raw_name = self.dbinfocfg.get('dblocalraw', 'dbname')        
         db_address = loc_db_raw_path+loc_db_raw_name
-        self.conn = lite.connect(db_address)
+        self.conn = lite.connect(db_address, check_same_thread = False)
         self.conn.text_factory = str     
         
         self.all_stock_code = []
@@ -46,6 +51,32 @@ class ProcFinancialData(qt.QuantLib):
             for q in quarter:
                 self.financial_quarters.append(y+q)
         self.past_financial_quarters = {}
+        
+    
+    #----------------------------------------------------------------------
+    def load_local_db_into_memory(self):
+        """"""
+        loc_db_raw_path = self.dbinfocfg.get('dblocalraw', 'path')
+        loc_db_raw_name = self.dbinfocfg.get('dblocalraw', 'dbname')        
+        db_address = loc_db_raw_path+loc_db_raw_name
+        
+        self.conn.close()
+        self.conn = lite.connect(':memory:', check_same_thread = False)
+        self.conn.text_factory = str
+        cur = self.conn.cursor()        
+        cur.execute("ATTACH '{}' as findata".format(db_address))
+        cur.execute("CREATE TABLE financial_data_Balance_Sheet AS "
+                    "SELECT * FROM findata.financial_data_Balance_Sheet")
+        cur.execute("CREATE TABLE financial_data_Income_Statement AS "
+                    "SELECT * FROM findata.financial_data_Income_Statement")
+        cur.execute("CREATE TABLE financial_data_CashFlow_Statement AS "
+                    "SELECT * FROM findata.financial_data_CashFlow_Statement") 
+        cur.execute("DETACH findata")
+        
+        cur.execute("CREATE INDEX Id1 ON financial_data_Balance_Sheet (StkCode,DATE,ReportingPeriod)")
+        cur.execute("CREATE INDEX Id2 ON financial_data_Income_Statement (StkCode,DATE,ReportingPeriod)")
+        cur.execute("CREATE INDEX Id3 ON financial_data_CashFlow_Statement (StkCode,DATE,ReportingPeriod)")      
+        
         
         
     #----------------------------------------------------------------------
@@ -126,32 +157,51 @@ class ProcFinancialData(qt.QuantLib):
                         
             
     #----------------------------------------------------------------------
-    def process(self, multithread):
+    def process(self, thread_pool=10):
         """"""
         msg = "Start to process financial data"
         self.log.info(msg)
         
         cur = self.conn.cursor()
-        sql = """
-              select * from {} where StkCode='{}'
-              """
-        
 
         for stk in self.all_stock_code:
+            tm1 = time.time()
             for date in sorted(self.days_when_data_announce[stk].keys()):
                 this_fin_qt = self.days_when_data_announce[stk][date][0]
                 fin_qts = self._get_past_fin_quarters(this_fin_qt, 10)
                 company_type = self.days_when_data_announce[stk][date][1]
-                print stk,date,this_fin_qt,company_type
+                #print stk,date,fin_qts,company_type
+                
+                result_dict = {}
+                #pool = Pool(10)
+                #for name in self.fin_item_names:
+                #    func = self.fin_item_algos[name].calc
+                #    pool.apply_async(func, args=(self.conn, stk, date, 
+                #                                fin_qts, result_dict))
+                #pool.close()
+                #pool.join()
+                for name in self.fin_item_names:
+                    self.fin_item_algos[name].calc(self.conn, stk, date, 
+                                                   fin_qts, result_dict)
+            tm2 = time.time()
+            print stk,tm2-tm1
+                
+                
                 
                 
     #----------------------------------------------------------------------
-    def _calc_financial_items(self, multithread):
+    def _get_financial_item_algos(self, cfgfilepath):
         """"""
-        if multithread == 0:
-            print 'multithread'
-        esle:
-            print 'siglethread'
+        fin_item_cfg = ConfigParser()
+        fin_item_cfg.optionxform = str
+        fin_item_cfg.readfp(codecs.open(cfgfilepath, 'r', 'utf-8-sig'))
+        self.fin_item_names = fin_item_cfg.options('financial_item')
+        self.fin_item_algos = {}
+        for name in self.fin_item_names:
+            exec("import procfindata.financial_item_algos_by_sql.{} as finalgo".format(name))
+            self.fin_item_algos[name] = finalgo
+        #self.fin_item_algos[name].calc()
+        
         
 
                 
