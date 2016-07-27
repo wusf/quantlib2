@@ -12,10 +12,12 @@ import sqlite3 as lite
 import time
 from datetime import datetime
 from datetime import timedelta
-from multiprocessing.dummy import Pool 
+import concurrent.futures
 from ConfigParser import ConfigParser
 import quantlib as qt
 import procfindata.financial_item_algos_by_sql
+import fetchdatatool.load_data_into_memory_db as loaddb
+
 
 
 ########################################################################
@@ -56,27 +58,22 @@ class ProcFinancialData(qt.QuantLib):
     #----------------------------------------------------------------------
     def load_local_db_into_memory(self):
         """"""
+        self.conn.close()
         loc_db_raw_path = self.dbinfocfg.get('dblocalraw', 'path')
         loc_db_raw_name = self.dbinfocfg.get('dblocalraw', 'dbname')        
-        db_address = loc_db_raw_path+loc_db_raw_name
+        loc_db_address = loc_db_raw_path+loc_db_raw_name
         
-        self.conn.close()
-        self.conn = lite.connect(':memory:', check_same_thread = False)
-        self.conn.text_factory = str
-        cur = self.conn.cursor()        
-        cur.execute("ATTACH '{}' as findata".format(db_address))
-        cur.execute("CREATE TABLE financial_data_Balance_Sheet AS "
-                    "SELECT * FROM findata.financial_data_Balance_Sheet")
-        cur.execute("CREATE TABLE financial_data_Income_Statement AS "
-                    "SELECT * FROM findata.financial_data_Income_Statement")
-        cur.execute("CREATE TABLE financial_data_CashFlow_Statement AS "
-                    "SELECT * FROM findata.financial_data_CashFlow_Statement") 
-        cur.execute("DETACH findata")
-        
-        cur.execute("CREATE INDEX Id1 ON financial_data_Balance_Sheet (StkCode,DATE,ReportingPeriod)")
-        cur.execute("CREATE INDEX Id2 ON financial_data_Income_Statement (StkCode,DATE,ReportingPeriod)")
-        cur.execute("CREATE INDEX Id3 ON financial_data_CashFlow_Statement (StkCode,DATE,ReportingPeriod)")      
-        
+        table_name_list = ['financial_data_Balance_Sheet',
+                           'financial_data_Income_Statement',
+                           'financial_data_CashFlow_Statement']
+        index_name_str = 'StkCode,Date,ReportingPeriod'
+        date_col_name = 'Date'
+        date = '20070101'
+    
+        self.conn = loaddb.load_data_into_memory_db(loc_db_address,
+                                                    table_name_list,
+                                                    index_name_str,
+                                                    date_col_name, date)
         
         
     #----------------------------------------------------------------------
@@ -104,7 +101,8 @@ class ProcFinancialData(qt.QuantLib):
         msg = "Find days when financial data announced"
         self.log.info(msg)   
         
-        date_when_new_announcement = {}
+        self.date_when_new_announcement = {}
+        self.rpt_period_when_data_announce = {}
         
         cur = self.conn.cursor()
         sql = """
@@ -126,38 +124,46 @@ class ProcFinancialData(qt.QuantLib):
                 _set = set(_dates)
                 date_set = date_set|_set
             date_list = sorted(list(date_set))
-            date_when_new_announcement[stk] = date_list
-        
+            self.date_when_new_announcement[stk] = date_list
+            
+        with concurrent.futures.ThreadPoolExecutor(max_workers=100) as executor:
+            for stk in self.all_stock_code:
+                func = self.match_date_and_reporting_period
+                executor.submit(func, self.conn, stk, 150)
+                
+                
+    #----------------------------------------------------------------------
+    def match_date_and_reporting_period(self, conn, stkcode, effective_num_day):
+        """"""
         sql = """
               select Date,ReportingPeriod,CompanyType
               from {}
               where StkCode='{}' and Date<='{}'
               order by ReportingPeriod desc limit 1
               """
-        for stk in self.all_stock_code:
-            effective_num_day = 150
-            self.days_when_data_announce[stk] = {}
-            for date in date_when_new_announcement[stk]:
-                rpt_period_list = []
-                for _tb in ['balance_sheet','income_statement','cashflow_statement']:
-                    tb = 'financial_data_'+_tb                
-                    cur.execute(sql.format(tb, stk, date))
-                    row = cur.fetchone()
-                    if row is not None:
-                        _date = datetime.strptime(row[0], '%Y%m%d')
-                        _rpt_period = datetime.strptime(row[1], '%Y%m%d')
-                        days_diff =  (_date - _rpt_period).days
-                        company_type = row[2]
-                        if days_diff <= effective_num_day:
-                            rpt_period_list.append(row[1])
-                if len(rpt_period_list) == 3:
-                    if (rpt_period_list[0] == rpt_period_list[1]
-                        and rpt_period_list[0] == rpt_period_list[2]):
-                        self.days_when_data_announce[stk][date] = [rpt_period_list[0],company_type]
-                        
-            
+        cur = conn.cursor()
+        self.rpt_period_when_data_announce[stkcode] = {}
+        for date in self.date_when_new_announcement[stkcode]:
+            rpt_period_list = []
+            for _tb in ['balance_sheet','income_statement','cashflow_statement']:
+                tb = 'financial_data_'+_tb                
+                cur.execute(sql.format(tb, stkcode, date))
+                row = cur.fetchone()
+                if row is not None:
+                    _date = datetime.strptime(row[0], '%Y%m%d')
+                    _rpt_period = datetime.strptime(row[1], '%Y%m%d')
+                    days_diff =  (_date - _rpt_period).days
+                    company_type = row[2]
+                    if days_diff <= effective_num_day:
+                        rpt_period_list.append(row[1])              
+            if len(rpt_period_list) == 3:
+                if (rpt_period_list[0] == rpt_period_list[1]
+                    and rpt_period_list[0] == rpt_period_list[2]):    
+                    self.rpt_period_when_data_announce[stkcode][date] = [rpt_period_list[0],company_type]
+                
+                
     #----------------------------------------------------------------------
-    def process(self, thread_pool=10):
+    def process(self):
         """"""
         msg = "Start to process financial data"
         self.log.info(msg)
@@ -166,27 +172,43 @@ class ProcFinancialData(qt.QuantLib):
 
         for stk in self.all_stock_code:
             tm1 = time.time()
-            for date in sorted(self.days_when_data_announce[stk].keys()):
-                this_fin_qt = self.days_when_data_announce[stk][date][0]
+            for date in sorted(self.rpt_period_when_data_announce[stk].keys()):
+                this_fin_qt = self.rpt_period_when_data_announce[stk][date][0]
                 fin_qts = self._get_past_fin_quarters(this_fin_qt, 10)
                 company_type = self.days_when_data_announce[stk][date][1]
                 #print stk,date,fin_qts,company_type
                 
                 result_dict = {}
-                #pool = Pool(10)
-                #for name in self.fin_item_names:
-                #    func = self.fin_item_algos[name].calc
-                #    pool.apply_async(func, args=(self.conn, stk, date, 
-                #                                fin_qts, result_dict))
-                #pool.close()
-                #pool.join()
                 for name in self.fin_item_names:
                     self.fin_item_algos[name].calc(self.conn, stk, date, 
                                                    fin_qts, result_dict)
+                        
             tm2 = time.time()
             print stk,tm2-tm1
                 
                 
+    #----------------------------------------------------------------------
+    def process_concurrent(self):
+        """"""
+        msg = "Start to process financial data"
+        self.log.info(msg)
+        
+        cur = self.conn.cursor()
+        for stk in self.all_stock_code:
+            tm1 = time.time()
+            with concurrent.futures.ThreadPoolExecutor(max_workers=100) as executor:
+                for date in sorted(self.rpt_period_when_data_announce[stk].keys()):
+                    this_fin_qt = self.rpt_period_when_data_announce[stk][date][0]
+                    fin_qts = self._get_past_fin_quarters(this_fin_qt, 10)
+                    company_type = self.days_when_data_announce[stk][date][1]
+                    #print stk,date,fin_qts,company_type
+                    result_dict = {} 
+                    for name in self.fin_item_names:
+                        func = self.fin_item_algos[name].calc
+                        executor.submit(func, self.conn, stk, date,fin_qts, result_dict)
+                        
+            tm2 = time.time()
+            print stk,tm2-tm1       
                 
                 
     #----------------------------------------------------------------------

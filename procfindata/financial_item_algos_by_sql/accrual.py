@@ -9,7 +9,7 @@
 #----------------------------------------------------------------------
 def calc(conn, stkcode, date, fin_quarters, result_dict):
     """"""
-    name = __file__.split('\\')[-1].split('.')[0]
+    name = __file__.split('\\')[-1].split('.')[0]+date
     
     cur =conn.cursor()
     sql = """
