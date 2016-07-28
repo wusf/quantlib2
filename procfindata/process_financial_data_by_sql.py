@@ -63,9 +63,9 @@ class ProcFinancialData(qt.QuantLib):
         loc_db_raw_name = self.dbinfocfg.get('dblocalraw', 'dbname')        
         loc_db_address = loc_db_raw_path+loc_db_raw_name
         
-        table_name_list = ['financial_data_Balance_Sheet',
-                           'financial_data_Income_Statement',
-                           'financial_data_CashFlow_Statement']
+        table_name_list = ['financial_data_balance_sheet',
+                           'financial_data_income_statement',
+                           'financial_data_cashflow_statement']
         index_name_str = 'StkCode,Date,ReportingPeriod'
         date_col_name = 'Date'
         date = '20070101'
@@ -108,7 +108,7 @@ class ProcFinancialData(qt.QuantLib):
         sql = """
               select distinct Date 
               from {}
-              where StkCode='{}' and Date>='{}'
+              where StkCode='{}'
               order by Date asc
               """        
         for stk in self.all_stock_code:
@@ -116,7 +116,7 @@ class ProcFinancialData(qt.QuantLib):
             date_set = set()
             for _tb in ['balance_sheet','income_statement','cashflow_statement']:
                 tb = 'financial_data_'+_tb
-                cur.execute(sql.format(tb, stk, self.start_date))
+                cur.execute(sql.format(tb, stk))
                 rows = cur.fetchall()
                 _dates = []
                 for row in rows:
@@ -126,11 +126,12 @@ class ProcFinancialData(qt.QuantLib):
             date_list = sorted(list(date_set))
             self.date_when_new_announcement[stk] = date_list
             
-        with concurrent.futures.ThreadPoolExecutor(max_workers=100) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=200) as executor:
             for stk in self.all_stock_code:
                 func = self.match_date_and_reporting_period
                 executor.submit(func, self.conn, stk, 150)
-                
+        #for stk in  self.all_stock_code:
+        #        self.match_date_and_reporting_period(self.conn, stk, 150)
                 
     #----------------------------------------------------------------------
     def match_date_and_reporting_period(self, conn, stkcode, effective_num_day):
