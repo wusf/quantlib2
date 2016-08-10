@@ -27,7 +27,7 @@ def load_data_into_pandas(local_db_address_or_conn,
     df_dict = {}
     for tb in table_names:
         _df = pd.read_sql(sql.format(tb, date_col_name, date),
-                          conn, index_col=['StkCode','Date','ReportingPeriod'])
+                          conn, index_col=['StkCode','Date'])
         df_dict[tb] = _df.sort_index()
     return df_dict
 
@@ -46,4 +46,5 @@ if __name__ == "__main__":
     
     #a = (df['StkCode']=='600837')
     #print df[a].sort('Date', ascending=False).head(1).size
-    print df[df.Date=='600837']
+    
+    print pl

@@ -126,12 +126,12 @@ class ProcFinancialData(qt.QuantLib):
             date_list = sorted(list(date_set))
             self.date_when_new_announcement[stk] = date_list
             
-        with concurrent.futures.ThreadPoolExecutor(max_workers=200) as executor:
-            for stk in self.all_stock_code:
-                func = self.match_date_and_reporting_period
-                executor.submit(func, self.conn, stk, 150)
-        #for stk in  self.all_stock_code:
-        #        self.match_date_and_reporting_period(self.conn, stk, 150)
+        #with concurrent.futures.ThreadPoolExecutor(max_workers=200) as executor:
+        #    for stk in self.all_stock_code:
+        #        func = self.match_date_and_reporting_period
+        #        executor.submit(func, self.conn, stk, 150)
+        for stk in  self.all_stock_code:
+                self.match_date_and_reporting_period(self.conn, stk, 150)
                 
     #----------------------------------------------------------------------
     def match_date_and_reporting_period(self, conn, stkcode, effective_num_day):
@@ -176,14 +176,15 @@ class ProcFinancialData(qt.QuantLib):
             for date in sorted(self.rpt_period_when_data_announce[stk].keys()):
                 this_fin_qt = self.rpt_period_when_data_announce[stk][date][0]
                 fin_qts = self._get_past_fin_quarters(this_fin_qt, 10)
-                company_type = self.days_when_data_announce[stk][date][1]
+                company_type = self.rpt_period_when_data_announce[stk][date][1]
                 #print stk,date,fin_qts,company_type
                 
                 result_dict = {}
                 for name in self.fin_item_names:
                     self.fin_item_algos[name].calc(self.conn, stk, date, 
-                                                   fin_qts, result_dict)
-                        
+                                                   fin_qts, company_type, 
+                                                   result_dict)
+                print result_dict          
             tm2 = time.time()
             print stk,tm2-tm1
                 
@@ -201,12 +202,12 @@ class ProcFinancialData(qt.QuantLib):
                 for date in sorted(self.rpt_period_when_data_announce[stk].keys()):
                     this_fin_qt = self.rpt_period_when_data_announce[stk][date][0]
                     fin_qts = self._get_past_fin_quarters(this_fin_qt, 10)
-                    company_type = self.days_when_data_announce[stk][date][1]
+                    company_type = self.rpt_period_when_data_announce[stk][date][1]
                     #print stk,date,fin_qts,company_type
                     result_dict = {} 
                     for name in self.fin_item_names:
                         func = self.fin_item_algos[name].calc
-                        executor.submit(func, self.conn, stk, date,fin_qts, result_dict)
+                        executor.submit(func, self.conn, stk, date, fin_qts, company_type, result_dict)
                         
             tm2 = time.time()
             print stk,tm2-tm1       

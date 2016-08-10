@@ -93,15 +93,15 @@ class ProcFinancialData(qt.QuantLib):
             for tbname in ['balance_sheet','income_statement','cashflow_statement']:
                 tbname = 'financial_data_'+tbname
                 _dates = self.table_df[tbname].loc[stk].index#.index.get_level_values('Date').unique()
-                #_set = set(_dates)
-                #date_set = date_set|_set
-            #date_list = sorted(list(date_set))
-            #self.date_when_new_announcement[stk] = date_list
+                _set = set(_dates)
+                date_set = date_set|_set
+            date_list = sorted(list(date_set))
+            self.date_when_new_announcement[stk] = date_list
             
-        #with concurrent.futures.ThreadPoolExecutor(max_workers=100) as executor:
-            #for stk in self.all_stock_code:
-            #    func = self.match_date_and_reporting_period
-            #    executor.submit(func, self.conn, stk, 150)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=500) as executor:
+            for stk in self.all_stock_code:
+                func = self.match_date_and_reporting_period
+                executor.submit(func, self.conn, stk, 150)
         #for stk in self.all_stock_code:
         #    self.match_rpt_period_with_date(stkcode, effective_num_day)
                 
@@ -116,6 +116,7 @@ class ProcFinancialData(qt.QuantLib):
         tb1 = df1[df1['StkCode']==stkcode]
         tb2 = df2[df2['StkCode']==stkcode]
         tb3 = df3[df3['StkCode']==stkcode]
+        print tb1
         
         self.rpt_period_of_new_announcement[stkcode] = {}
         for date in self.date_when_new_announcement[stkcode]:
