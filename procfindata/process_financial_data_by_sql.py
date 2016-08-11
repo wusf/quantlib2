@@ -36,9 +36,15 @@ class ProcFinancialData(qt.QuantLib):
         
         loc_db_raw_path = self.dbinfocfg.get('dblocalraw', 'path')
         loc_db_raw_name = self.dbinfocfg.get('dblocalraw', 'dbname')        
-        db_address = loc_db_raw_path+loc_db_raw_name
-        self.conn = lite.connect(db_address, check_same_thread = False)
-        self.conn.text_factory = str     
+        db_local_raw_address = loc_db_raw_path + loc_db_raw_name
+        self.raw_conn = lite.connect(db_local_raw_address, check_same_thread = False)
+        self.raw_conn.text_factory = str
+        
+        loc_db_prc_path = self.dbinfocfg.get('dblocal_processed', 'path')
+        loc_db_prc_name = self.dbinfocfg.get('dblocal_processed', 'dbname')        
+        db_loc_prc_address = loc_db_prc_path + loc_db_prc_name
+        self.prc_conn = lite.connect(db_loc_prc_address, check_same_thread = False)
+        self.prc_conn.text_factory = str        
         
         self.all_stock_code = []
         self.days_when_data_announce = {}
@@ -58,7 +64,7 @@ class ProcFinancialData(qt.QuantLib):
     #----------------------------------------------------------------------
     def load_local_db_into_memory(self):
         """"""
-        self.conn.close()
+        self.raw_conn.close()
         loc_db_raw_path = self.dbinfocfg.get('dblocalraw', 'path')
         loc_db_raw_name = self.dbinfocfg.get('dblocalraw', 'dbname')        
         loc_db_address = loc_db_raw_path+loc_db_raw_name
@@ -70,11 +76,14 @@ class ProcFinancialData(qt.QuantLib):
         date_col_name = 'Date'
         date = '20070101'
     
-        self.conn = loaddb.load_data_into_memory_db(loc_db_address,
+        self.raw_conn = loaddb.load_data_into_memory_db(loc_db_address,
                                                     table_name_list,
                                                     index_name_str,
                                                     date_col_name, date)
         
+    #----------------------------------------------------------------------
+    def create_(self):
+        """"""
         
     #----------------------------------------------------------------------
     def find_all_stock_codes(self):
@@ -82,7 +91,7 @@ class ProcFinancialData(qt.QuantLib):
         msg = "Find all stock codes"
         self.log.info(msg)    
         
-        cur = self.conn.cursor()
+        cur = self.raw_conn.cursor()
         sql = """
               select distinct StkCode
               from financial_data_balance_sheet
@@ -104,7 +113,7 @@ class ProcFinancialData(qt.QuantLib):
         self.date_when_new_announcement = {}
         self.rpt_period_when_data_announce = {}
         
-        cur = self.conn.cursor()
+        cur = self.raw_conn.cursor()
         sql = """
               select distinct Date 
               from {}
@@ -126,12 +135,9 @@ class ProcFinancialData(qt.QuantLib):
             date_list = sorted(list(date_set))
             self.date_when_new_announcement[stk] = date_list
             
-        #with concurrent.futures.ThreadPoolExecutor(max_workers=200) as executor:
-        #    for stk in self.all_stock_code:
-        #        func = self.match_date_and_reporting_period
-        #        executor.submit(func, self.conn, stk, 150)
         for stk in  self.all_stock_code:
-                self.match_date_and_reporting_period(self.conn, stk, 150)
+                self.match_date_and_reporting_period(self.raw_conn, stk, 150)
+                
                 
     #----------------------------------------------------------------------
     def match_date_and_reporting_period(self, conn, stkcode, effective_num_day):
@@ -169,9 +175,10 @@ class ProcFinancialData(qt.QuantLib):
         msg = "Start to process financial data"
         self.log.info(msg)
         
-        cur = self.conn.cursor()
+        cur = self.raw_conn.cursor()
 
         for stk in self.all_stock_code:
+            print stk
             tm1 = time.time()
             for date in sorted(self.rpt_period_when_data_announce[stk].keys()):
                 this_fin_qt = self.rpt_period_when_data_announce[stk][date][0]
@@ -181,10 +188,10 @@ class ProcFinancialData(qt.QuantLib):
                 
                 result_dict = {}
                 for name in self.fin_item_names:
-                    self.fin_item_algos[name].calc(self.conn, stk, date, 
+                    self.fin_item_algos[name].calc(self.raw_conn, stk, date, 
                                                    fin_qts, company_type, 
                                                    result_dict)
-                print result_dict          
+                #print result_dict          
             tm2 = time.time()
             print stk,tm2-tm1
                 
@@ -195,24 +202,29 @@ class ProcFinancialData(qt.QuantLib):
         msg = "Start to process financial data"
         self.log.info(msg)
         
-        cur = self.conn.cursor()
+        cur = self.raw_conn.cursor()
+
         for stk in self.all_stock_code:
+            print stk
             tm1 = time.time()
-            with concurrent.futures.ThreadPoolExecutor(max_workers=100) as executor:
-                for date in sorted(self.rpt_period_when_data_announce[stk].keys()):
-                    this_fin_qt = self.rpt_period_when_data_announce[stk][date][0]
-                    fin_qts = self._get_past_fin_quarters(this_fin_qt, 10)
-                    company_type = self.rpt_period_when_data_announce[stk][date][1]
-                    #print stk,date,fin_qts,company_type
-                    result_dict = {} 
+            for date in sorted(self.rpt_period_when_data_announce[stk].keys()):
+                this_fin_qt = self.rpt_period_when_data_announce[stk][date][0]
+                fin_qts = self._get_past_fin_quarters(this_fin_qt, 10)
+                company_type = self.rpt_period_when_data_announce[stk][date][1]
+                #print stk,date,fin_qts,company_type
+                
+                result_dict = {}
+                with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
                     for name in self.fin_item_names:
                         func = self.fin_item_algos[name].calc
-                        executor.submit(func, self.conn, stk, date, fin_qts, company_type, result_dict)
-                        
+                        executor.submit(func, self.raw_conn, stk, date, 
+                                                       fin_qts, company_type, 
+                                                       result_dict)
+                #print result_dict          
             tm2 = time.time()
-            print stk,tm2-tm1       
-                
-                
+            print stk,tm2-tm1
+            
+
     #----------------------------------------------------------------------
     def _get_financial_item_algos(self, cfgfilepath):
         """"""

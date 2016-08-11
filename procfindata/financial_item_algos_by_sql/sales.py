@@ -10,7 +10,7 @@ import numpy as np
 
 
 #----------------------------------------------------------------------
-def calc(conn, stkcode, date, fin_quarters, result_dict):
+def calc(conn, stkcode, date, fin_quarters, company_type, result_dict):
     """"""
     name = __file__.split('\\')[-1].split('.')[0]
     name_ttm = name + '_ttm'

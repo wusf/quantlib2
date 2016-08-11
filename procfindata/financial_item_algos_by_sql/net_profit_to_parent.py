@@ -3,7 +3,7 @@
 """
   Author:  wusf --<wushifan221@gmail.com>
   Purpose: 
-  Created: 2016/8/10
+  Created: 2016/8/11
 """
 
 import numpy as np
@@ -29,31 +29,16 @@ def calc(conn, stkcode, date, fin_quarters, company_type, result_dict):
     same_rpt_period_2y_ago = year_2y_ago + rpt_period[4:]    
 
     cur =conn.cursor()
-    
-    if company_type == 1:
-        sql = """
-              select OperatingRevenue
-                     -ifnull(TaxAndSurcharge,0)
-                     -ifnull(OperatingCost,0)
-                     -ifnull(SellExpns,0)
-                     -ifnull(AdminExpns,0)
-                     -ifnull(AssetDepreciation,0)
-              from financial_data_income_statement
-              where StkCode='{}'
-              and ReportingPeriod='{}'
-              and Date<='{}'
-              order by Date desc
-              """ 
-    else:
-        sql = """
-              select OperatingProfit
-              from financial_data_income_statement
-              where StkCode='{}'
-              and ReportingPeriod='{}'
-              and Date<='{}'
-              order by Date desc
-              """
-        
+
+    sql = """
+          select ifnull(NetProfitToParent,NetProfit)
+          from financial_data_income_statement
+          where StkCode='{}'
+          and ReportingPeriod='{}'
+          and Date<='{}'
+          order by Date desc
+          """
+
     cur.execute(sql.format(stkcode, rpt_period, date))
     res = cur.fetchone()
     if res is None:

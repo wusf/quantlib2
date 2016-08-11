@@ -29,31 +29,16 @@ def calc(conn, stkcode, date, fin_quarters, company_type, result_dict):
     same_rpt_period_2y_ago = year_2y_ago + rpt_period[4:]    
 
     cur =conn.cursor()
-    
-    if company_type == 1:
-        sql = """
-              select OperatingRevenue
-                     -ifnull(TaxAndSurcharge,0)
-                     -ifnull(OperatingCost,0)
-                     -ifnull(SellExpns,0)
-                     -ifnull(AdminExpns,0)
-                     -ifnull(AssetDepreciation,0)
-              from financial_data_income_statement
-              where StkCode='{}'
-              and ReportingPeriod='{}'
-              and Date<='{}'
-              order by Date desc
-              """ 
-    else:
-        sql = """
-              select OperatingProfit
-              from financial_data_income_statement
-              where StkCode='{}'
-              and ReportingPeriod='{}'
-              and Date<='{}'
-              order by Date desc
-              """
-        
+
+    sql = """
+          select TotAsset-Cash
+          from financial_data_balance_sheet
+          where StkCode='{}'
+          and ReportingPeriod='{}'
+          and Date<='{}'
+          order by Date desc
+          """
+
     cur.execute(sql.format(stkcode, rpt_period, date))
     res = cur.fetchone()
     if res is None:
@@ -63,15 +48,6 @@ def calc(conn, stkcode, date, fin_quarters, company_type, result_dict):
     else:
         val1 = res[0]
 
-    cur.execute(sql.format(stkcode, last_ann_rpt_period, date))
-    res = cur.fetchone()
-    if res is None:
-        val2 = np.nan
-    elif res[0] is None:
-        val2 = np.nan
-    else:
-        val2 = res[0]
-
     cur.execute(sql.format(stkcode, last_same_rpt_period, date))
     res = cur.fetchone()
     if res is None:
@@ -80,15 +56,6 @@ def calc(conn, stkcode, date, fin_quarters, company_type, result_dict):
         val3 = np.nan
     else:
         val3 = res[0]
-
-    cur.execute(sql.format(stkcode, ann_rpt_period_2y_ago, date))
-    res = cur.fetchone()
-    if res is None:
-        val4 = np.nan
-    elif res[0] is None:
-        val4 = np.nan
-    else:
-        val4 = res[0]
 
     cur.execute(sql.format(stkcode, same_rpt_period_2y_ago, date))
     res = cur.fetchone()
@@ -100,7 +67,7 @@ def calc(conn, stkcode, date, fin_quarters, company_type, result_dict):
         val5 = res[0]
 
     result_dict[name] = val1
-    result_dict[name_ttm] = val1 + val2 - val3
+    #result_dict[name_ttm] = val1 + val2 - val3
     result_dict[name_1y_ago] = val3
-    result_dict[name_ttm_1y_ago] = val3 + val4 - val5
-    result_dict[name_2y_ago] = val5
+    #result_dict[name_ttm_1y_ago] = val3 + val4 - val5
+    result_dict[name_2y_ago] = val5    
