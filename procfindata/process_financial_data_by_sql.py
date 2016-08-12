@@ -82,8 +82,29 @@ class ProcFinancialData(qt.QuantLib):
                                                     date_col_name, date)
         
     #----------------------------------------------------------------------
-    def create_(self):
+    def create_db_for_processed_data(self, cfgfilepath, tbname):
         """"""
+        self._get_financial_item_algos(cfgfilepath)
+        cur = self.prc_conn.cursor()
+        sql = "drop table if exists {}".format(tbname)
+        cur.execute(sql)
+        
+        sql = """
+              create table {}(StkCode text,
+                              Date text,
+                              ReportingPeriod text,
+                              CompanyType text
+                              {})
+              """
+        initial_str = ""
+        _type = ['_ttm','_ttm_1y_ago','_1y_ago','_2y_ago']
+        for name in self.fin_item_names:
+            _str = ','+name+' float'
+            for t in _type:
+                _str += ','+name+t+' float'
+            initial_str+=_str
+        cur.execute(sql.format(tbname, initial_str))
+        
         
     #----------------------------------------------------------------------
     def find_all_stock_codes(self):
