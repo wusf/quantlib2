@@ -88,6 +88,7 @@ class ProcFinancialData(qt.QuantLib):
         cur = self.prc_conn.cursor()
         sql = "drop table if exists {}".format(tbname)
         cur.execute(sql)
+        cur.execute("PRAGMA synchronous = OFF")
         
         sql = """
               create table {}(StkCode text,
@@ -97,13 +98,21 @@ class ProcFinancialData(qt.QuantLib):
                               {})
               """
         initial_str = ""
-        _type = ['_ttm','_ttm_1y_ago','_1y_ago','_2y_ago']
+        n = 0 
+        self.col_names = []
         for name in self.fin_item_names:
+            n+=1
             _str = ','+name+' float'
-            for t in _type:
-                _str += ','+name+t+' float'
+            self.col_names.append(name)
+            for suffix in self.fin_item_names_suffix[name]:
+                n+=1
+                _str += ','+name+suffix+' float'
+                self.col_names.append(name+suffix)
             initial_str+=_str
+            
         cur.execute(sql.format(tbname, initial_str))
+        self.len_of_fin_item = n
+        self.tbname = tbname
         
         
     #----------------------------------------------------------------------
@@ -196,7 +205,10 @@ class ProcFinancialData(qt.QuantLib):
         msg = "Start to process financial data"
         self.log.info(msg)
         
-        cur = self.raw_conn.cursor()
+        cur = self.prc_conn.cursor()
+        
+        q_str = '?,?,?,?'+self.len_of_fin_item*',?'
+        
 
         for stk in self.all_stock_code:
             print stk
@@ -212,9 +224,19 @@ class ProcFinancialData(qt.QuantLib):
                     self.fin_item_algos[name].calc(self.raw_conn, stk, date, 
                                                    fin_qts, company_type, 
                                                    result_dict)
-                #print result_dict          
+                insert_vals = [stk,date,this_fin_qt,company_type]
+                for col in self.col_names:
+                    insert_vals.append(result_dict[col])
+                cur.execute("""
+                            insert into {} 
+                            values ({})
+                            """.format(self.tbname,q_str), insert_vals)
+                #stkcoded,date,reportingperiod,rpttype
+                    
+            
             tm2 = time.time()
             print stk,tm2-tm1
+        self.prc_conn.commit()
                 
                 
     #----------------------------------------------------------------------
@@ -253,6 +275,9 @@ class ProcFinancialData(qt.QuantLib):
         fin_item_cfg.optionxform = str
         fin_item_cfg.readfp(codecs.open(cfgfilepath, 'r', 'utf-8-sig'))
         self.fin_item_names = fin_item_cfg.options('financial_item')
+        self.fin_item_names_suffix = {}
+        for name in self.fin_item_names:
+            self.fin_item_names_suffix[name] = fin_item_cfg.get('financial_item', name).split(',')
         self.fin_item_algos = {}
         for name in self.fin_item_names:
             exec("import procfindata.financial_item_algos_by_sql.{} as finalgo".format(name))
