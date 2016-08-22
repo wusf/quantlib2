@@ -15,7 +15,7 @@ from datetime import timedelta
 import concurrent.futures
 from ConfigParser import ConfigParser
 import quantlib as qt
-import procfindata.financial_item_algos_by_sql
+import procfindata.financial_item_algo_by_sql
 import fetchdatatool.load_data_into_memory_db as loaddb
 
 
