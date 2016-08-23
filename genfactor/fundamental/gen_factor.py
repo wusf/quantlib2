@@ -112,7 +112,7 @@ class GenerateFundamentalFactor(qt.QuantLib, start_date, dbinfocfgpath, log):
             
             
     #----------------------------------------------------------------------
-    def _calculate_factor_values(self, stkcode):
+    def _calculate_factor_values(self, stkcode, algo_file_path):
         """"""
         raw_cur = self.raw_conn.cursor()
         sql = """
@@ -120,7 +120,7 @@ class GenerateFundamentalFactor(qt.QuantLib, start_date, dbinfocfgpath, log):
               from market_data_a_share2
               where StkCode='{}' and Date>='{}'
               """.format(stkcode, self.start_date)
-        df_mkt = pd.read_sql(sql, self.raw_conn, index_col='')
+        df_mkt = pd.read_sql(sql, self.raw_conn, index_col='Date')
         
         prc_cur = self.prc_conn.cursor()
         sql = """
@@ -128,5 +128,7 @@ class GenerateFundamentalFactor(qt.QuantLib, start_date, dbinfocfgpath, log):
               from financial_data
               where StkCode='{}' and Date>='{}'
               """.format(stkcode, self.start_date)
+        df_fin = pd.read_sql(sql, self.prc_conn, index_col='Date')
         
-        
+        _raw_data = pd.concat([df_mkt,df_fin], axis=1)
+        raw_data = _raw_data.fillna(method='ffill')
