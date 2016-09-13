@@ -16,7 +16,7 @@ import concurrent.futures
 from ConfigParser import ConfigParser
 import quantlib as qt
 import procfindata.financial_item_algo_by_sql
-import fetchdatatool.load_data_into_memory_db as loaddb
+import fetchdatatool.load_data_into_memory_db as ldim
 
 
 
@@ -64,7 +64,13 @@ class ProcFinancialData(qt.QuantLib):
     #----------------------------------------------------------------------
     def load_local_db_into_memory(self):
         """"""
+        msg = "Load database into in-memory database"
+        self.log.info(msg)        
+
         self.raw_conn.close()
+        
+        load2mem = ldim.LoadDataIntoMemory()
+        
         loc_db_raw_path = self.dbinfocfg.get('dblocalraw', 'path')
         loc_db_raw_name = self.dbinfocfg.get('dblocalraw', 'dbname')        
         loc_db_address = loc_db_raw_path+loc_db_raw_name
@@ -76,10 +82,8 @@ class ProcFinancialData(qt.QuantLib):
         date_col_name = 'Date'
         date = '20070101'
     
-        self.raw_conn = loaddb.load_data_into_memory_db(loc_db_address,
-                                                    table_name_list,
-                                                    index_name_str,
-                                                    date_col_name, date)
+        load2mem.load(loc_db_address, table_name_list, index_name_str, date_col_name, date)
+        self.raw_conn = load2mem.conn
         
     #----------------------------------------------------------------------
     def create_db_for_processed_data(self, cfgfilepath, tbname):
@@ -93,6 +97,7 @@ class ProcFinancialData(qt.QuantLib):
         sql = """
               create table {}(StkCode text,
                               Date text,
+                              AnnouncementDate text,
                               ReportingPeriod text,
                               CompanyType text
                               {})
@@ -116,7 +121,7 @@ class ProcFinancialData(qt.QuantLib):
         
         
     #----------------------------------------------------------------------
-    def find_all_stock_codes(self):
+    def search_for_all_stock_codes(self):
         """"""
         msg = "Find all stock codes"
         self.log.info(msg)    
@@ -207,7 +212,7 @@ class ProcFinancialData(qt.QuantLib):
         
         cur = self.prc_conn.cursor()
         
-        q_str = '?,?,?,?'+self.len_of_fin_item*',?'
+        q_str = '?,?,?,?,?'+self.len_of_fin_item*',?'
         
 
         for stk in self.all_stock_code:
@@ -224,7 +229,7 @@ class ProcFinancialData(qt.QuantLib):
                     self.fin_item_algos[name].calc(self.raw_conn, stk, date, 
                                                    fin_qts, company_type, 
                                                    result_dict)
-                insert_vals = [stk,date,this_fin_qt,company_type]
+                insert_vals = [stk,date,date,this_fin_qt,company_type]
                 for col in self.col_names:
                     insert_vals.append(result_dict[col])
                 cur.execute("""
@@ -280,7 +285,7 @@ class ProcFinancialData(qt.QuantLib):
             self.fin_item_names_suffix[name] = fin_item_cfg.get('financial_item', name).split(',')
         self.fin_item_algos = {}
         for name in self.fin_item_names:
-            exec("import procfindata.financial_item_algos_by_sql.{} as finalgo".format(name))
+            exec("import procfindata.financial_item_algo_by_sql.{} as finalgo".format(name))
             self.fin_item_algos[name] = finalgo
         #self.fin_item_algos[name].calc()
         
